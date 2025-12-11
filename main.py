@@ -1,11 +1,12 @@
 import pandas as pd
 import os
 from config import (
-    MODELS, SUBSAMPLE_RATIOS, DROPOUT_RATES, RESULTS_DIR
+    MODELS, SUBSAMPLE_RATIOS, DROPOUT_RATES, 
+    RESULTS_DIR, BATCH_GENE_SIGMA, BATCH_LIBRARY_FACTOR
 )
 from data_loader import load_raw_data, load_embeddings
-from perturbations import apply_subsampling, apply_dropout
-from metrics import evaluate_clustering, evaluate_stability
+from perturbations import apply_subsampling, apply_dropout, apply_batch_effect
+from metrics import evaluate_clustering, evaluate_stability, evaluate_batch_integration
 
 def run_benchmark():
     print("Loading Ground Truth Data...")
@@ -21,7 +22,6 @@ def run_benchmark():
         
         for model in MODELS:
             emb = load_embeddings(model, "subsample", ratio, adata_sub)
-            
             ari = evaluate_clustering(emb, adata_sub)
             
             results.append({
@@ -33,7 +33,6 @@ def run_benchmark():
             })
 
     print("\n--- Starting Dropout Benchmark ---")
-    
     clean_embeddings_cache = {}
     
     for rate in DROPOUT_RATES:
@@ -66,6 +65,35 @@ def run_benchmark():
                         "Metric": "Cosine_Stability",
                         "Value": stability
                     })
+
+    print("\n--- Starting Batch Effect Benchmark ---")
+    adata_batch = apply_batch_effect(
+        adata_full, 
+        gene_sigma=BATCH_GENE_SIGMA, 
+        library_factor=BATCH_LIBRARY_FACTOR
+    )
+    
+    for model in MODELS:
+        print(f"Processing Batch Effect for {model}")
+        emb_batch = load_embeddings(model, "batch", "simulated", adata_batch)
+        
+        ari_bio = evaluate_clustering(emb_batch, adata_batch)
+        results.append({
+            "Model": model,
+            "Experiment": "Batch_Effect",
+            "Parameter": "Simulated",
+            "Metric": "ARI (Bio Conservation)",
+            "Value": ari_bio
+        })
+        
+        sil_batch = evaluate_batch_integration(emb_batch, adata_batch)
+        results.append({
+            "Model": model,
+            "Experiment": "Batch_Effect",
+            "Parameter": "Simulated",
+            "Metric": "Batch_Silhouette (Lower is Better)",
+            "Value": sil_batch
+        })
 
     if not os.path.exists(RESULTS_DIR):
         os.makedirs(RESULTS_DIR)
