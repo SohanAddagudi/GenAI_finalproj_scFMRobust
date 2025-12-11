@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.sparse as sp
-from config import RANDOM_SEED
+from config import RANDOM_SEED, BATCH_COL
 
 def apply_subsampling(adata, retention_ratio):
     if retention_ratio >= 1.0:
@@ -65,4 +65,26 @@ def apply_dropout(adata, dropout_rate):
     
     bdata = adata.copy()
     bdata.X = new_X
+    return bdata
+
+def apply_batch_effect(adata, n_genes, shift_factor):
+    bdata = adata.copy()
+    n_cells = bdata.shape[0]
+    n_vars = bdata.shape[1]
+    
+    rng = np.random.default_rng(RANDOM_SEED)
+    batch_indices = rng.choice(n_cells, size=n_cells // 2, replace=False)
+    
+    bdata.obs[BATCH_COL] = "Batch1"
+    bdata.obs[BATCH_COL].iloc[batch_indices] = "Batch2"
+    
+    gene_indices = rng.choice(n_vars, size=n_genes, replace=False)
+    
+    if sp.issparse(bdata.X):
+        bdata.X = bdata.X.tolil()
+        bdata.X[batch_indices[:, None], gene_indices] *= shift_factor
+        bdata.X = bdata.X.tocsr()
+    else:
+        bdata.X[batch_indices[:, None], gene_indices] *= shift_factor
+        
     return bdata
