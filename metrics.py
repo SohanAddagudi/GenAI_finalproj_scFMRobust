@@ -1,9 +1,8 @@
 import numpy as np
 import scanpy as sc
 import anndata
-from sklearn.metrics import adjusted_rand_score
-from sklearn.metrics.pairwise import cosine_similarity
-from config import CELL_TYPE_COL
+from sklearn.metrics import adjusted_rand_score, silhouette_score
+from config import CELL_TYPE_COL, BATCH_COL
 
 def evaluate_clustering(embeddings, adata):
     tmp_adata = anndata.AnnData(X=embeddings)
@@ -13,7 +12,6 @@ def evaluate_clustering(embeddings, adata):
     sc.tl.leiden(tmp_adata, resolution=0.5)
     
     if CELL_TYPE_COL not in tmp_adata.obs:
-        print("Warning: Ground truth labels missing. Returning ARI=0.")
         return 0.0
         
     labels_true = tmp_adata.obs[CELL_TYPE_COL]
@@ -32,3 +30,13 @@ def evaluate_stability(clean_embeddings, noisy_embeddings):
     similarities = dot_products / (norm_clean * norm_noisy)
     
     return np.mean(similarities)
+
+def evaluate_batch_integration(embeddings, adata):
+    if BATCH_COL not in adata.obs:
+        return 0.0
+        
+    batch_labels = adata.obs[BATCH_COL]
+    
+    score = silhouette_score(embeddings, batch_labels)
+    
+    return abs(score)
