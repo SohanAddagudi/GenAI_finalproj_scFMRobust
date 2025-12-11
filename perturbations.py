@@ -67,24 +67,31 @@ def apply_dropout(adata, dropout_rate):
     bdata.X = new_X
     return bdata
 
-def apply_batch_effect(adata, n_genes, shift_factor):
+def apply_batch_effect(adata, gene_sigma, library_factor):
     bdata = adata.copy()
     n_cells = bdata.shape[0]
     n_vars = bdata.shape[1]
     
     rng = np.random.default_rng(RANDOM_SEED)
+    
     batch_indices = rng.choice(n_cells, size=n_cells // 2, replace=False)
     
     bdata.obs[BATCH_COL] = "Batch1"
     bdata.obs[BATCH_COL].iloc[batch_indices] = "Batch2"
     
-    gene_indices = rng.choice(n_vars, size=n_genes, replace=False)
+    gene_factors = rng.lognormal(mean=0.0, sigma=gene_sigma, size=n_vars)
+    
+    combined_factors = gene_factors * library_factor
     
     if sp.issparse(bdata.X):
         bdata.X = bdata.X.tolil()
-        bdata.X[batch_indices[:, None], gene_indices] *= shift_factor
+        
+        row_indices = batch_indices
+        
+        bdata.X[row_indices, :] = bdata.X[row_indices, :].multiply(combined_factors)
+        
         bdata.X = bdata.X.tocsr()
     else:
-        bdata.X[batch_indices[:, None], gene_indices] *= shift_factor
+        bdata.X[batch_indices, :] *= combined_factors
         
     return bdata
